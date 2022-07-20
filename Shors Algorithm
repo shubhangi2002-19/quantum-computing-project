@@ -1,0 +1,312 @@
+NAME--- SHUBHANGI
+TOPIC ----- SHORS ALGORITHM
+Shor’s algorithm is famous for factoring integers in polynomial time. 
+Since the best-known classical algorithm requires superpolynomial time to factor the product of two primes, the widely used cryptosystem, RSA, relies on factoring being impossible for large enough NUMBERS.
+we will focus on the quantum part of Shor’s algorithm, which actually solves the problem of _period finding_.
+
+## Directory Structure 
+
+### Classical Part
+
+This code calculate the greatest common divider of two given number a and b
+def gcd(a, b):
+    if b > a:
+        a, b = b, a
+    while b > 0:
+        a = a % b
+        a, b = b, a
+    return a
+This code calculate the answer of $a^b\pmod N$
+def fastPow(a, b, N):
+    ans = 1
+    while (b > 0):
+        if b % 2:
+            ans = ans * a % N
+        b = b // 2
+        a = a * a
+    return ans
+This code test that whether a given number $N$ is a prime number
+def miller_robin(n):
+    if n == 2 or n == 3:
+        return True
+    if n % 2 == 0:
+        return False
+
+    t = 10
+    q = 0
+    m = n - 1
+    while m % 2 == 0:
+        q += 1
+        m /= 2
+    for _ in range(t):
+        a = random.randint(2, n-2)
+        x = fastPow.fastPow(a, m, n)
+        if x == 1:
+            continue
+        j = 0
+        while j < q and x != n-1:
+            x = (x * x) % n
+            j += 1
+        if j >= q:
+            return False
+    return True
+This code test whether a given number $N$ is in the form of $a^b$
+def power(N):
+    def isPower(l, r, s, N):
+        if (l > r):
+            return -1
+        mid = (l + r) / 2
+        ans = fastPow.fastPowBool(mid, s, N)
+        if (ans == N):
+            return mid
+        elif (ans < N):
+            return isPower(mid+1, r, s, N)
+        else:
+            return isPower(l, mid-1, s, N)
+
+    s = int(math.floor(math.log(N, 2))) + 1
+    r = int(math.floor(math.sqrt(N))) + 1
+    for i in range(2, s):
+        ans = isPower(2, r, i, N)
+        if ans != -1:
+            return ans
+    return -1
+This code is the exactly we combine the tools together and factorize a given number $N$.
+* *shor* is the interface that can be called to find factorization of $N$
+* *order_finding* is the function that can be called to find possible order for the given number pair $(x, n)$
+
+class myShor():
+    def __init__(self, precision, thread_num):
+        self.Precision = precision
+        self.Thread_Num = thread_num
+
+    def order_finding(self, x, n):
+        qsim = qsharp.QuantumSimulator()
+
+        def phase_estimation(x, n):
+            tmp = int(qsim.run(PhaseEstimation, x, n,
+                               self.Precision).result().clr_object)
+            theta = float(tmp) / (2**self.Precision)
+            return theta
+
+        for _ in range(2):
+            theta = phase_estimation(x, n)
+            if theta == 0:
+                print("========\nOrder Finding for: x={}, N={}\nGet theta: {}\nNo r estimated\n".format(
+                    x, n, theta))
+                continue
+
+            r = fraction.denominator(theta, n)
+            print("========\nOrder Finding for: x={}, N={}\nGet theta: {}\nEstimate r: {}\n".format(
+                x, n, theta, r))
+            for i in r:
+                m = fastPow.fastPow(x, i, n)
+                if m == 1:
+                    return i
+        return -1
+
+    def shor(self, n):
+        if miller_robin.miller_robin(n):
+            return (1, n)
+        else:
+            tmp = power.power(n)
+            if tmp != -1:
+                return (tmp, n // tmp)
+            else:
+                if (n % 2 == 0):
+                    return (2, n // 2)
+                while True:
+                    # Parrel computing for some random x
+                    xlist = random.sample(range(3, n - 1), self.Thread_Num)
+                    g = [gcd.gcd(x, n) for x in xlist]
+                    for idx, g in enumerate(g):
+                        if (g != 1):
+                            # ======= For debug ===========
+                            # while gcd.gcd(xlist[idx], n) != 1:
+                            #     newx = random.randint(3, n - 1)
+                            #     xlist[idx] = newx
+                            # ======= In Real Quantum Computer =========
+                            return (g, n // g)
+
+                    print("======== Order Finding Started ========")
+                    threadPool = ThreadPool(processes=self.Thread_Num)
+                    results = []
+                    for x in xlist:
+                        results.append(threadPool.apply_async(
+                            self.order_finding, args=(x, n)))
+                    threadPool.close()
+                    threadPool.join()
+                    results = [r.get() for r in results]
+
+                    for r in results:
+                        if r == -1:
+                            continue
+                        if (r % 2 == 0):
+                            s = fastPow.fastPow(x, r // 2, n)
+                            if (s != 1 and s != n-1):
+                                g1 = gcd.gcd(s+1, n)
+                                g2 = gcd.gcd(s-1, n)
+                                if (g1 != 1):
+                                    return (g1, n // g1)
+                                elif (g2 != 1):
+                                    return (g2, n // g2)
+```
+
+[fraction.py](./Classical/fraction.py): This code estimate the denominator of possible fraction representing the given decimal $x$. The fra
+
+
+```python
+def denominator(x, N):
+    seq = []
+    if (x < 1):
+        x = 1 / x
+    k = 10
+    for i in range(10):
+        seq.append(math.floor(x))
+        if (abs(x - math.floor(x)) < 1e-9):
+            k = i + 1
+            break
+        x = 1 / (x - math.floor(x))
+    ans = []
+    ans2 = []
+    for i in range(k):
+        up = 1
+        down = seq[i]
+        for j in range(i):
+            t = seq[i-1-j]
+            d = down
+            down = down * t + up
+            up = d
+        ans.append(int(down))
+        ans2.append(int(up))
+    return ans
+
+```
+
+[test.py](./Classical/test.py): This code test our implementaion of shor's algorithm for numbers from 1 to 100. And our implementation handles the task very well.
+
+
+```python
+alg = myShor(6, 3)
+with open('test.out', 'w', encoding='utf8') as outfile:
+    for i in range(1, 100):
+        print(alg.shor(i), file=outfile)
+        outfile.flush()
+```
+
+### Quantum Part
+[Operation.qs](./myShorLib/Operation.qs): This implement the quantum part of the algorithm
+* *PhaseEstimation* is the interface for quantum phase estimation.
+
+
+```python
+operation PhaseEstimation(
+    x : Int, 
+    N : Int, 
+    precision : Int) : Int
+{
+    body
+    {
+        let eigenLength = BitSize(N);
+        mutable res = 0;
+
+        using (eigenvector = Qubit[eigenLength]){
+            X(eigenvector[0]);
+
+            using (target = Qubit[precision]){
+
+                PhaseEstimationImpl(x, N, target, eigenvector);
+
+                for (i in 0..(precision - 1)) {
+                    set res = res * 2;
+                    if (M(target[i]) == One) {
+                        set res = res + 1;
+                    }
+                }
+                ResetAll(target);
+                ResetAll(eigenvector);
+            }
+        }
+
+        return res;
+    }
+}
+* *PhaseEstimationImpl* implements the details for phase estimation. 
+
+
+```python
+operation PhaseEstimationImpl (
+    x : Int,
+    N : Int,
+    target : Qubit[],
+    eigenvector : Qubit[]) : ()
+{
+    body {
+        let targetLength = Length(target);
+
+        for (idx in 0..(targetLength - 1)) {
+            H(target[idx]);
+        }
+
+        mutable power = 1;
+        for (idx in 0..(targetLength - 1)) {
+            (Controlled ConstructU) ([target[targetLength - 1 -idx]], (x, N, power, eigenvector)); 
+            set power = power * 2;
+        }
+
+        (InverseFT)(target);
+        // (Adjoint QFT)(BigEndian(target));
+    }
+}
+```
+
+* $U$ is constructed by the code below:
+
+
+```python
+operation ConstructU(
+    x : Int,
+    modulus : Int, 
+    power : Int, 
+    target : Qubit[]) : ()
+{
+    body {
+        ModularMultiplyByConstantLE(
+            PowerMod(x, power, modulus), 
+            modulus,
+            LittleEndian(target)
+        ); 
+    }
+    adjoint auto
+
+    controlled auto
+    adjoint controlled auto 
+}
+```
+
+* *Inverse fourier transformation* is implemented as below:
+
+
+```python
+operation InverseFT(qs : Qubit[]) : () 
+{
+    body {
+        let qLength = Length(qs);
+        for (i in 0..(qLength - 1)) {
+            for (j in 0..(i-1)) {
+                (Controlled R1Frac) ([qs[j]], (1, i - j, qs[i]));
+            }
+            H(qs[i]);
+        }
+
+        for (i in 0..qLength/2-1) {
+            SWAP(qs[i],qs[qLength-1-i]);
+        }
+
+    }
+    adjoint auto
+    controlled auto
+    controlled adjoint auto
+}
+```
+
